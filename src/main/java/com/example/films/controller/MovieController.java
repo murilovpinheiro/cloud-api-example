@@ -9,11 +9,22 @@ import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
 import com.example.films.movie.*;
 
+import io.minio.GetObjectArgs;
+import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import io.minio.errors.*;
+import io.minio.http.Method;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,9 +44,15 @@ public class MovieController {
             .withCredentials(new EnvironmentVariableCredentialsProvider())
             .build();
 
+    MinioClient minioClient =
+            MinioClient.builder()
+                    .endpoint("http://localhost:9000")
+                    .credentials("minioadmin", "minioadmin")
+                    .build();
+
     @CrossOrigin(origins = "*", allowedHeaders = "*")
     @PostMapping
-    public ResponseEntity<String> saveMovie(@RequestBody MovieRequestDTO data) {
+    public ResponseEntity<String> saveMovie(@RequestBody MovieRequestDTO data, MultipartFile imageFile) {
         try {
             Movie movie = new Movie(data);
             repository.save(movie);
@@ -67,8 +84,7 @@ public class MovieController {
     @CrossOrigin(origins = "*", allowedHeaders = "*")
     @GetMapping
     public List<MovieResponseDTO> getAll(){
-        List<MovieResponseDTO> movieList = repository.findAll().stream().map(MovieResponseDTO::new).toList();
-        return movieList;
+        return repository.findAll().stream().map(MovieResponseDTO::new).toList();
     }
 
     // Por enquanto o delete tá com o ID na URL, mas qualquer coisa posso mudar depois, só deixei o mais simples
@@ -97,5 +113,26 @@ public class MovieController {
         } else {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    @PostMapping("/uploadImage")
+    public ResponseEntity<String> uploadImage(@RequestParam("file") MultipartFile file) throws IOException, ServerException, InsufficientDataException, ErrorResponseException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
+
+        minioClient.putObject(PutObjectArgs
+                .builder()
+                .bucket("movies")
+                .object(file.getOriginalFilename())
+                .stream(file.getInputStream(), file.getSize(), -1)
+                        .build());
+        String url =
+                minioClient.getPresignedObjectUrl(
+                        GetPresignedObjectUrlArgs.builder()
+                                .method(Method.GET)
+                                .bucket("movies")
+                                .object(file.getOriginalFilename())
+                                .expiry(60 * 60 * 24)
+                                .build());
+        return ResponseEntity.ok(url);
+
     }
 }
