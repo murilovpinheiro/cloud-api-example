@@ -44,16 +44,13 @@ public class MovieController {
             .withCredentials(new EnvironmentVariableCredentialsProvider())
             .build();
 
-    MinioClient minioClient =
-            MinioClient.builder()
-                    .endpoint("http://localhost:9000")
-                    .credentials("minioadmin", "minioadmin")
-                    .build();
+    @Autowired
+    MinioClient minioClient;
 
     @CrossOrigin(origins = "*", allowedHeaders = "*")
     @PostMapping
-    public ResponseEntity<String> saveMovie(@RequestBody MovieRequestDTO data, MultipartFile imageFile) {
-        try {
+    public ResponseEntity<String> saveMovie(@RequestBody MovieRequestDTO data) {
+
             Movie movie = new Movie(data);
             repository.save(movie);
 
@@ -63,6 +60,7 @@ public class MovieController {
             item.put("action",  new AttributeValue("Insertion"));
             item.put("dateTime", new AttributeValue(LocalDateTime.now().toString()));
 
+            System.out.println("chegou para salvar o filme " + movie.getTitle());
 
             // Executando a operação de inserção
             var response = dynamoDB.putItem(tableName, item);
@@ -75,9 +73,7 @@ public class MovieController {
             }
 
             return ResponseEntity.ok("Movie saved successfully");
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to save movie");
-        }
+
     }
 
 
@@ -115,9 +111,10 @@ public class MovieController {
         }
     }
 
+    @CrossOrigin(origins = "*", allowedHeaders = "*")
     @PostMapping("/uploadImage")
     public ResponseEntity<String> uploadImage(@RequestParam("file") MultipartFile file) throws IOException, ServerException, InsufficientDataException, ErrorResponseException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
-
+        System.out.println("tentando salvar a foto: " + file.getOriginalFilename());
         minioClient.putObject(PutObjectArgs
                 .builder()
                 .bucket("movies")
